@@ -1,0 +1,22 @@
+depq
+pymonad
+pandas~=1.3.3
+numpy~=1.21.2
+scipy~=1.7.1
+sacred
+# sklearn
+tqdm~=4.62.3
+h5py
+gevent
+matplotlib~=3.4.3
+pypandoc
+# deprecation
+pymongo~=3.12.0
+click~=8.0.1
+tensorflow~=2.3.0
+tikzplotlib~=0.9.16
+docplex~=2.22.213
+psycopg2~=2.9.2
+torchvision~=0.11.1
+depq~=1.5.5
+dotmap~=1.3.24

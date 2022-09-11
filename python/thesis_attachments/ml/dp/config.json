@@ -1,0 +1,114 @@
+{
+  "name": "DP_LeNet",
+  "n_gpu": 1,
+  "log_dir": "test",
+  "arch": {
+    "type": "DpModel",
+    "args": {
+      "lstm_width": 64,
+      "lstm_count": 1,
+      "bidirectional": true,
+      "conv_encoding": true,
+      "simple_head": false
+    }
+  },
+  "data_loader": {
+    "type": "PytorchTemplateMongoDatasetLoader",
+    "args": {
+      "normalizer_name": "Norm(fn(Identity())_pn(Tardy()))",
+      "batch_size": 32,
+      "n": "(10, 100, 1)",
+      "mmax": "(5, 55, 5)",
+      "load": "(0.5, 2.1, 0.3)",
+      "count": 19,
+      "collection": "instances_baptiste_train",
+      "shuffle": true,
+      "validation_split": 0.1,
+      "num_workers": 0
+    }
+  },
+  "data_loader_test": {
+    "type": "PytorchTemplateMongoDatasetLoader",
+    "args": {
+      "normalizer_name": "Norm(fn(Identity())_pn(Tardy()))",
+      "batch_size": 32,
+      "n": "(10, 105, 5)",
+      "mmax": "(5, 55, 5)",
+      "load": "(0.5, 2.1, 0.3)",
+      "count": 8,
+      "collection": "instances_baptiste_test",
+      "shuffle": true,
+      "validation_split": 0.1,
+      "num_workers": 0
+    }
+  },
+  "data_loader_p100": {
+    "type": "PytorchTemplateMongoDatasetLoader",
+    "args": {
+      "normalizer_name": "Norm(fn(Identity())_pn(Tardy()))",
+      "batch_size": 32,
+      "n": "(10, 105, 5)",
+      "mmax": "(50, 550, 50)",
+      "load": "(0.5, 2.1, 0.3)",
+      "count": 8,
+      "collection": "instances_baptiste_p100",
+      "shuffle": true,
+      "validation_split": 0.1,
+      "num_workers": 0
+    }
+  },
+  "optimizer": {
+    "type": "Adam",
+    "args": {
+      "lr": 0.0001,
+      "weight_decay": 0,
+      "amsgrad": true
+    }
+  },
+  "loss": "mse_loss",
+  "metrics": [
+    "acc_5",
+    "acc_4",
+    "acc_3",
+    "acc_2",
+    "acc_1",
+    "acc_05",
+    "early_acc_5",
+    "early_acc_4",
+    "early_acc_3",
+    "early_acc_2",
+    "early_acc_1",
+    "early_acc_05",
+    "tardy_acc_5",
+    "tardy_acc_4",
+    "tardy_acc_3",
+    "tardy_acc_2",
+    "tardy_acc_1",
+    "tardy_acc_05",
+    "err_5",
+    "err_25",
+    "err_05",
+    "determined_4",
+    "determined_3",
+    "determined_2",
+    "determined_1",
+    "determined_05",
+    "early_pct"
+  ],
+  "lr_scheduler": {
+    "type": "StepLR",
+    "args": {
+      "step_size": 12,
+      "gamma": 0.5
+    }
+  },
+  "trainer": {
+    "epochs": 100,
+    "save_dir": "saved/",
+    "save_period": 1,
+    "verbosity": 2,
+    "monitor": "min val_loss",
+    "early_stop": 10,
+    "tensorboard": true
+  }
+}

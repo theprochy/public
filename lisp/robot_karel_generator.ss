@@ -1,0 +1,280 @@
+(define (append-element lst elem)
+  (if (null? elem) lst
+      (if (symbol? lst) (append (list lst) (list elem))
+                        (append lst (list elem)))))
+
+(define (get-xy pos list-of-lists)
+  (list-ref (list-ref list-of-lists (cadr pos)) (car pos)))
+
+(define (apply-at fn list pos)
+  (cond ((= pos 0) (cons (fn (car list)) (cdr list)))
+        (#t (cons (car list) (apply-at fn (cdr list) (- pos 1))))))
+
+(define (append-at fn list pos)
+  (if (null? list) (fn '())
+      (begin (cond ((= pos 0) (append (fn (car list)) (cdr list)))
+        (#t (cons (car list) (append-at fn (cdr list) (- pos 1))))))))
+
+(define (apply-xy fn pos list-of-lists)
+  (apply-at (lambda (line)
+              (apply-at fn line (car pos))
+             ) list-of-lists (cadr pos))
+)
+
+(define (subst new list pos)
+  (apply-at (lambda (x) new) list pos))
+
+(define (get-mz state)
+  (list-ref state 0))
+
+(define (get-pos state)
+  (list-ref state 1))
+
+(define (get-or state)
+  (list-ref state 2))
+
+(define (north? state)
+  (eqv? (get-or state) 'north))
+
+(define (mark? state)
+  (> (get-xy (get-pos state) (get-mz state)) 0))
+
+(define (w? x)
+  (eqv? x 'w))
+
+(define (wall? state)
+  (cond ((eqv? (get-or state) 'north)
+          (w? (get-xy (apply-at (lambda (x) (- x 1)) (get-pos state) 1) (get-mz state))))
+        ((eqv? (get-or state) 'east)
+          (w? (get-xy (apply-at (lambda (x) (+ x 1)) (get-pos state) 0) (get-mz state))))
+        ((eqv? (get-or state) 'south)
+          (w? (get-xy (apply-at (lambda (x) (+ x 1)) (get-pos state) 1) (get-mz state))))
+        ((eqv? (get-or state) 'west)
+          (w? (get-xy (apply-at (lambda (x) (- x 1)) (get-pos state) 0) (get-mz state))))))
+
+(define (step state)
+  (if (wall? state) '()
+      (cond ((eqv? (get-or state) 'north)
+          (apply-xy (lambda (x) (- x 1)) '(1 1) state))
+        ((eqv? (get-or state) 'east)
+          (apply-xy (lambda (x) (+ x 1)) '(0 1) state))
+        ((eqv? (get-or state) 'south)
+          (apply-xy (lambda (x) (+ x 1)) '(1 1) state))
+        ((eqv? (get-or state) 'west)
+          (apply-xy (lambda (x) (- x 1)) '(0 1) state)))))
+
+(define (turn-left state)
+  (cond ((eqv? (get-or state) 'north)
+          (subst 'west state 2))
+        ((eqv? (get-or state) 'east)
+          (subst 'north state 2))
+        ((eqv? (get-or state) 'south)
+          (subst 'east state 2))
+        ((eqv? (get-or state) 'west)
+          (subst 'south state 2))))
+
+(define (put-mark state)
+  (subst (apply-xy (lambda (x) (+ x 1)) (get-pos state) (get-mz state))
+         state 0))
+
+(define (get-mark state)
+  (if (> (get-xy (get-pos state) (get-mz state)) 0)
+      (subst (apply-xy (lambda (x) (- x 1)) (get-pos state) (get-mz state))
+         state 0) '()))
+
+(define (get-procedure procs name)
+  (if (null? procs) '()
+      (if (eqv? (list-ref (car procs) 1) name) (list-ref (car procs) 2)
+          (get-procedure (cdr procs) name))))
+
+(define (is-empty-procedure? procs name)
+  (if (null? procs) #f
+      (if (eqv? (list-ref (car procs) 1) name)
+          (if (null? (list-ref (car procs) 2)) #t #f)
+          (is-empty-procedure? (cdr procs) name))))
+
+(define (eval-expr state expr program limit acc threshold)
+  (if (> (length acc) (list-ref threshold 3)) '()
+  (cond ((null? expr) (list acc state))
+        ((symbol? expr) (eval-expr state (list expr) program limit acc threshold))
+
+        ((eqv? (car expr) 'nop) (eval-expr state (cdr expr) program limit acc threshold)) 
+        ((eqv? (car expr) 'step) (if (null? (step state)) (list acc state)
+                                            (eval-expr (step state) (cdr expr) program limit (append acc '(step)) threshold)))
+        ((eqv? (car expr) 'turn-left) (eval-expr (turn-left state) (cdr expr) program limit (append acc '(turn-left)) threshold))
+        ((eqv? (car expr) 'put-mark)  (eval-expr (put-mark state) (cdr expr) program limit (append acc '(put-mark)) threshold))
+        ((eqv? (car expr) 'get-mark) (if (null? (get-mark state)) (list acc state)
+                                              (eval-expr (get-mark state) (cdr expr) program limit (append acc '(get-mark)) threshold)))
+        ((eqv? (car expr) 'xxx)       (eval-expr state (cdr expr) program (+ limit 1) acc threshold))
+        
+        ((not (null? (get-procedure program (car expr))))
+          (if (> limit 0) (eval-expr state (append (append-element (get-procedure program (car expr)) 'xxx) (cdr expr)) program (- limit 1) acc threshold)
+                          (list acc state)))
+        ((is-empty-procedure? program (car expr)) (eval-expr state (cdr expr) program limit acc threshold))
+
+        ((eqv? (car expr) 'if) (eval-expr state (if (null? (cddddr expr))
+                                                 (list (list (car expr) (cadr expr) (caddr expr) (cadddr expr)))
+                                                 (append (list (list (car expr) (cadr expr) (caddr expr) (cadddr expr))) (cddddr expr))) program limit acc threshold))
+        ((eqv? (caar expr) 'if) 
+          (cond ((eqv? (list-ref (car expr) 1) 'north?)
+                  (eval-expr state (append
+                                (if (symbol? (list-ref (car expr) (if (north? state) 2 3)))
+                                    (list (list-ref (car expr) (if (north? state) 2 3))) 
+                                    (list-ref (car expr) (if (north? state) 2 3))) (cdr expr)) program limit acc threshold))
+                ((eqv? (list-ref (car expr) 1) 'mark?)
+                  (eval-expr state (append
+                                (if (symbol? (list-ref (car expr) (if (mark? state) 2 3)))
+                                    (list (list-ref (car expr) (if (mark? state) 2 3))) 
+                                    (list-ref (car expr) (if (mark? state) 2 3))) (cdr expr)) program limit acc threshold))
+                ((eqv? (list-ref (car expr) 1) 'wall?)
+                  (eval-expr state (append
+                                (if (symbol? (list-ref (car expr) (if (wall? state) 2 3)))
+                                    (list (list-ref (car expr) (if (wall? state) 2 3))) 
+                                    (list-ref (car expr) (if (wall? state) 2 3))) (cdr expr)) program limit acc threshold))
+                 )))))
+
+
+(define (simulate state expr program limit threshold)
+  (eval-expr state expr program limit '() threshold))
+
+(define (manhattan state1 state2)
+  (if (null? state1) 0
+      (if (null? (car state1)) (manhattan (cdr state1) (cdr state2))
+          (if (eqv? (caar state1) 'w) (manhattan (cons (cdar state1) (cdr state1)) (cons (cdar state2) (cdr state2)))
+              (+ (abs (- (caar state1) (caar state2))) (manhattan (cons (cdar state1) (cdr state1)) (cons (cdar state2) (cdr state2))))))))
+
+(define (config-dist conf1 conf2)
+  (let ((add (if (eqv? (list-ref conf1 2) (list-ref conf2 2)) 0 1)))
+    (+ add (abs (- (get-xy '(0 1) conf1) (get-xy '(0 1) conf2))) (abs (- (get-xy '(1 1) conf1) (get-xy '(1 1) conf2))))    
+  ))
+
+(define (prg-length prg)
+  (if (null? prg) 0
+      (cond ((list? (car prg)) (prg-length (append (car prg) (cdr prg))))
+            ((eqv? (car prg) 'procedure) (prg-length (cdr prg)))
+            ((eqv? (car prg) 'if) (prg-length (cdr prg)))
+            (#t (+ 1 (prg-length (cdr prg)))))))
+
+(define (sum-scores s1 s2)
+  `(,(+ (list-ref s1 0) (list-ref s2 0))
+    ,(+ (list-ref s1 1) (list-ref s2 1))
+    ,(list-ref s1 2)
+    ,(+ (list-ref s1 3) (list-ref s2 3))))
+  
+
+(define (compare-scores s1 s2)
+  (cond ((> (list-ref s1 0) (list-ref s2 0)) 1)
+        ((< (list-ref s1 0) (list-ref s2 0)) -1)
+        ((> (list-ref s1 1) (list-ref s2 1)) 1)
+        ((< (list-ref s1 1) (list-ref s2 1)) -1)
+        ((> (list-ref s1 2) (list-ref s2 2)) 1)
+        ((< (list-ref s1 2) (list-ref s2 2)) -1)
+        ((> (list-ref s1 3) (list-ref s2 3)) 1)
+        ((< (list-ref s1 3) (list-ref s2 3)) -1)
+        (#t 0)))
+
+(define (add-result res lst)
+  (cond ((null? lst) (if (null? res) '() (list res)))
+        ((null? res) lst)
+        (#t (let ((comp (compare-scores (car res) (caar lst)))) 
+              (cond ((= comp 1)  (cons (car lst) (add-result res (cdr lst))))
+                    (#t (cons res lst)))))))
+
+(define (under-threshold? cur threshold)
+  (cond ((> (list-ref cur 0) (list-ref threshold 0)) #f)
+        ((> (list-ref cur 1) (list-ref threshold 1)) #f)
+        ((> (list-ref cur 2) (list-ref threshold 2)) #f)
+        ((> (list-ref cur 3) (list-ref threshold 3)) #f)
+        (#t #t)))
+
+(define (evaluate-prg prg pairs threshold limit)
+  (cond ((null? pairs) `((0 0 0 0) ,prg))
+        (#t (let ((finished (simulate (caar pairs) 'start prg limit threshold)))
+              (cond ((null? finished) '())
+                     (#t (let ((man-dist (manhattan (caadr finished) (caadar pairs)))
+                                (conf-dist (config-dist (cadr finished) (cadar pairs)))
+                                (prg-len (prg-length prg))
+                                (steps (length (list-ref finished 0))))
+                           (let ((ev (evaluate-prg prg (cdr pairs) threshold limit)))
+                             (if (null? ev) '()
+                                 (let ((score (sum-scores (list man-dist conf-dist prg-len steps) (car ev)))) 
+                                   (if (under-threshold? score threshold) (list score prg) '())))))))))))
+
+(define (evaluate prgs pairs threshold limit)
+  (cond ((null? prgs) '())
+        (#t (add-result (evaluate-prg (car prgs) pairs threshold limit)
+                        (evaluate (cdr prgs) pairs threshold limit)))))
+
+(define (congruential-rng seed)
+  (let ((a 16807 #|(expt 7 5)|#)
+        (m 2147483647 #|(- (expt 2 31) 1)|#))
+    (let ((m-1 (- m 1)))
+      (let ((seed (+ (remainder seed m-1) 1)))
+        (lambda (b)
+          (let ((n (remainder (* a seed) m)))
+            (set! seed n)
+            (quotient (* (- n 1) b) m-1)))))))
+
+(define random (congruential-rng 12345))
+
+(define commands '(step turn-left put-mark get-mark if proc))
+
+(define tests '(north? mark? wall?))
+
+(define (random-proc procs-num)
+  (let ((proc (random procs-num)))
+    (if (= proc 0) 'start proc)))
+
+(define (gen-prg-procedure n procs-num)
+  (if (= n 0)'() 
+    (let ((add (list-ref commands (random 6))))
+      (cond ((eqv? add 'if)
+               (let* ((rand  (random (- n 1)))
+                      (t-len (random rand))
+                      (test  (list-ref tests (random 3)))
+                      (true  (gen-prg-procedure t-len procs-num))
+                      (false (gen-prg-procedure (- rand t-len) procs-num)))
+                 (cond
+                   ((= rand 0) (gen-prg-procedure n procs-num))
+                   (#t (append (list (list 'if test true false)) (gen-prg-procedure (- n (+ rand 1)) procs-num))))))
+            ((eqv? add 'proc) (cons (random-proc procs-num) (gen-prg-procedure (- n 1) procs-num)))
+            (#t (cons add (gen-prg-procedure (- n 1) procs-num)))))))
+
+(define (gen-prg len proc-num i)
+  (if (= (- proc-num 1) i)
+      (if (= i 0)
+          (cons (list 'procedure 'start (gen-prg-procedure len proc-num)) '()) 
+          (cons (list 'procedure i (gen-prg-procedure len proc-num)) '())) 
+      (let ((rand (+ (random (- len 1)) 1)))
+        (if (= i 0)
+            (cons (list 'procedure 'start (gen-prg-procedure rand proc-num)) (gen-prg (- len rand) proc-num (+ i 1)))
+            (cons (list 'procedure i (gen-prg-procedure rand proc-num)) (gen-prg (- len rand) proc-num (+ i 1)))))))
+
+(define (gen-prgs n ex dx)
+  (if (= n 0) '() 
+  (cons (gen-prg (+ ex (- (random (* 2 dx)) dx)) (+ (random (quotient (- ex 5) 5)) 1) 0) (gen-prgs (- n 1) ex dx))))
+
+(define rand-test
+  (list-ref tests (random 3)))
+
+(define (eval-next pairs threshold limit)
+  (let ((out (evaluate (gen-prgs 1 20 5) pairs threshold limit)))
+    (if (null? out) (eval-next pairs threshold limit) out)))
+
+(define (evolve-next pairs threshold limit best)
+  (display (car best))(newline)
+  (let* ((old-a (caaar best))
+        (old-b (cadaar best))
+        (new-best (eval-next pairs threshold limit))
+        (new-a (caaar new-best))
+        (new-b (cadaar new-best)))
+    (if (and (= old-a 0) (= old-b 0))
+      (begin (display (car best))(newline))
+      (if (< new-a old-a)
+          (evolve-next pairs threshold limit new-best)
+          (if (and (= new-a old-a) (< new-b old-b))
+              (evolve-next pairs threshold limit new-best)
+              (evolve-next pairs threshold limit best))))))
+
+(define (evolve pairs threshold limit)
+  (evolve-next pairs threshold limit (eval-next pairs threshold limit)))

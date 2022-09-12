@@ -1,0 +1,1 @@
+This repository contains various samples of the code I have produced over the years. It contains mostly code written during school assignments, which means that with the exception of thesis attachments, functionality is prioritized over readability.
